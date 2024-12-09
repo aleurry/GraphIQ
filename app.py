@@ -4,6 +4,9 @@ import plotly.express as px
 import io
 import numpy as np
 from scipy import stats
+from io import BytesIO
+import openpyxl
+from openpyxl.utils.dataframe import dataframe_to_rows
 
 def clean_data(df, missing_threshold=0.5, zscore_threshold=3, numeric_range=None):
     report = []
@@ -45,11 +48,24 @@ def clean_data(df, missing_threshold=0.5, zscore_threshold=3, numeric_range=None
 
     for col in ["Name", "name"]:
         if col in df.columns:
+            # Step 1: Replace missing or empty values with 'Unknown'
+            blank_count = df[col].isna().sum() + (df[col] == "").sum()
             df[col] = df[col].fillna("Unknown").replace("", "Unknown")
-            replaced_count = df[col].apply(lambda x: any(char.isdigit() for char in x)).sum()
+
+            # Step 2: Count and replace invalid names (those containing digits)
+            digit_count = df[col].apply(lambda x: any(char.isdigit() for char in x)).sum()
             df[col] = df[col].apply(lambda x: "Unknown" if any(char.isdigit() for char in x) else x)
             if replaced_count > 0:
                 report.append(f"Replaced {replaced_count} invalid names in column '{col}' with 'Unknown'.")
+
+            # Step 3: Report the changes
+            if blank_count > 0:
+                report.append(f"Replaced {blank_count} missing or empty names in column '{col}' with 'Unknown'.")
+            if digit_count > 0:
+                report.append(f"Replaced {digit_count} invalid names containing numbers in column '{col}' with 'Unknown'.")
+            if blank_count == 0 and digit_count == 0:
+                report.append(f"No invalid or missing names found in column '{col}'.")
+
 
     # Fill missing values for categorical columns
     for col in df.select_dtypes(include=["object", "category"]).columns:
@@ -153,8 +169,57 @@ def generate_chart_description(fig):
         return description
     return "No chart to describe."
 
+def generate_report(df, chart, report, description):
+    # Create an Excel report in memory
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        # 1. Write the cleaned data to the "Cleaned Data" sheet
+        df.to_excel(writer, index=False, sheet_name="Cleaned Data")
+
+        # 2. Add the explanation to the "Explanation" sheet
+        workbook = writer.book
+        worksheet = workbook.create_sheet("Explanation")
+
+        # Combine data cleaning report with chart description
+        combined_report = (
+            ["Data Cleaning Report", "----------------------"] +
+            report +
+            ["", "Chart Description", "----------------"]
+        )
+
+        # Split chart description into multiple rows for readability
+        wrapped_description = description.split(". ")
+        combined_report += [line + "." for line in wrapped_description if line]
+
+        # Write the combined report to the worksheet
+        for idx, line in enumerate(combined_report):
+            worksheet.cell(row=idx + 1, column=1, value=line)
+
+        # Adjust column width and enable text wrapping
+        column_width = max(len(line) for line in combined_report) + 5
+        worksheet.column_dimensions['A'].width = min(column_width, 50)  # Limit max column width
+        for row in worksheet.iter_rows():
+            for cell in row:
+                cell.alignment = openpyxl.styles.Alignment(wrap_text=True)
+
+        # 3. Add the chart to the "Chart" sheet
+        if chart is not None:
+            # Convert chart to image (PNG format)
+            chart_image = chart.to_image(format="png")
+            chart_image_stream = io.BytesIO(chart_image)
+
+            # Create a new sheet for the chart
+            chart_sheet = workbook.create_sheet("Chart")
+            # Add the image to the new sheet
+            img = openpyxl.drawing.image.Image(chart_image_stream)
+            chart_sheet.add_image(img, "A1")
+    
+    # Save the file to memory and return the bytes
+    output.seek(0)
+    return output
 
 
+# Main Streamlit app
 def main():
     st.title("CSV Data Cleaning and Visualization")
 
@@ -166,16 +231,17 @@ def main():
         st.write("Uploaded CSV:")
         st.dataframe(df)
 
-        if st.checkbox("Clean Data"):
-            df, report = clean_data(df)
-            st.write("Cleaned Data:")
-            st.dataframe(df)
-            
-            # Display the cleaning process report
-            st.subheader("Data Cleaning Report")
-            for item in report:
-                st.write("- " + item)
+        # Automatically clean data when uploaded
+        df, report = clean_data(df)
+        st.write("Cleaned Data:")
+        st.dataframe(df)
+        
+        # Display the cleaning process report
+        st.subheader("Data Cleaning Report")
+        for item in report:
+            st.write("- " + item)
 
+        # Step 3: Visualization Options
         if st.checkbox("Visualize Data"):
             st.subheader("Choose Visualization Type")
             visualization_type = st.selectbox(
@@ -183,13 +249,15 @@ def main():
                 ["Line Graph", "Column Graph", "Heatmap", "Radial Chart", "Funnel Chart"]
             )
 
-            numeric_columns = df.select_dtypes(include=["number"]).columns.tolist()
-            if len(numeric_columns) < 1:
-                st.warning("No numeric columns available for visualization.")
+            # Allow user to select columns for visualization
+            st.subheader("Select Columns for Visualization")
+            all_columns = df.columns.tolist()  # Include all columns, not just numeric
+            if len(all_columns) < 1:
+                st.warning("No columns available for visualization.")
                 return
 
-            x_axis = st.selectbox("X-Axis", options=numeric_columns)
-            y_axis = st.selectbox("Y-Axis", options=numeric_columns)
+            x_axis = st.selectbox("X-Axis", options=all_columns)
+            y_axis = st.selectbox("Y-Axis", options=all_columns)
 
             fig = None
             if visualization_type == "Line Graph":
@@ -205,23 +273,22 @@ def main():
 
             if fig:
                 st.plotly_chart(fig)
-
+                
                 # Auto-generate a description for the chart
                 description = generate_chart_description(fig)
                 st.subheader("Chart Description")
                 st.write(description)
 
+        # Step 4: Report Download
         if st.checkbox("Download Cleaned Data as Report"):
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                df.to_excel(writer, index=False, sheet_name="Cleaned Data")
-            output.seek(0)
+            report_file = generate_report(df, fig, report, description)
             st.download_button(
-                label="Download Excel Report",
-                data=output,
-                file_name="cleaned_data_report.xlsx",
+                label="Download Excel Report with Explanation and Chart",
+                data=report_file,
+                file_name="Report.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+    )
+
 
 if __name__ == "__main__":
     main()
