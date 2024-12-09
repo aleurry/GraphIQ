@@ -55,7 +55,7 @@ def clean_data(df, missing_threshold=0.5, zscore_threshold=3, numeric_range=None
             # Step 2: Count and replace invalid names (those containing digits)
             digit_count = df[col].apply(lambda x: any(char.isdigit() for char in x)).sum()
             df[col] = df[col].apply(lambda x: "Unknown" if any(char.isdigit() for char in x) else x)
-
+            
             # Step 3: Report the changes
             if blank_count > 0:
                 report.append(f"Replaced {blank_count} missing or empty names in column '{col}' with 'Unknown'.")
@@ -216,78 +216,140 @@ def generate_report(df, chart, report, description):
     output.seek(0)
     return output
 
+def load_css():
+    """Load CSS for the Streamlit app from an external file."""
+    with open('style.css') as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
-# Main Streamlit app
 def main():
-    st.title("CSV Data Cleaning and Visualization")
-
-    # Step 1: File Upload
-    uploaded_file = st.file_uploader("Upload a CSV File", type="csv")
+    st.set_page_config(page_title="Data Cleaning and Visualization", layout="wide")
     
-    if uploaded_file is not None:
-        # Load the CSV file into a DataFrame
-        df = pd.read_csv(uploaded_file)
-        st.write("Uploaded CSV:")
-        st.dataframe(df)
+    # Load custom CSS
+    load_css()
 
-        # Automatically clean data when uploaded
-        df, report = clean_data(df)
-        st.write("Cleaned Data:")
-        st.dataframe(df)
-        
-        # Display the cleaning process report
-        st.subheader("Data Cleaning Report")
-        for item in report:
-            st.write("- " + item)
+    st.image("images/logo.png")
+    # Welcome page with a "Get Started" button
+    with st.container():
+        if 'started' not in st.session_state:
+            st.session_state['started'] = False
+        if 'visualization_started' not in st.session_state:
+            st.session_state['visualization_started'] = False
 
-        # Step 3: Visualization Options
-        if st.checkbox("Visualize Data"):
-            st.subheader("Choose Visualization Type")
-            visualization_type = st.selectbox(
-                "Select a chart type:",
-                ["Line Graph", "Column Graph", "Heatmap", "Radial Chart", "Funnel Chart"]
-            )
+        if not st.session_state.started:
+            st.markdown('<p class="big-font">Welcome to GraphIQ!</p>', unsafe_allow_html=True)
+            st.markdown('<p class="medium-font">We are excited to have you on board. With GraphIQ, you can easily clean, analyze, and visualize your data like never before. <br> Get started today and unlock powerful insights with just a few clicks!</p>', unsafe_allow_html=True)
+            if st.button("Get Started"):
+                st.session_state.started = True
 
-            # Allow user to select columns for visualization
-            st.subheader("Select Columns for Visualization")
-            all_columns = df.columns.tolist()  # Include all columns, not just numeric
-            if len(all_columns) < 1:
-                st.warning("No columns available for visualization.")
-                return
+        if st.session_state.started:
+            st.markdown('<p class="steps-font">Step 1: Upload CSV File</p>', unsafe_allow_html=True)
 
-            x_axis = st.selectbox("X-Axis", options=all_columns)
-            y_axis = st.selectbox("Y-Axis", options=all_columns)
+            # Step 1: File Upload
+            uploaded_file = st.file_uploader("Upload a CSV File", type="csv")
+            
+            if uploaded_file is not None:
+                df = pd.read_csv(uploaded_file)
+                st.write("Uploaded CSV:")
+                st.dataframe(df)
 
-            # Generate the selected visualization
-            fig = None
-            if visualization_type == "Line Graph":
-                fig = px.line(df, x=x_axis, y=y_axis, title="Line Graph")
-            elif visualization_type == "Column Graph":
-                fig = px.bar(df, x=x_axis, y=y_axis, title="Column Graph")
-            elif visualization_type == "Heatmap":
-                fig = px.imshow(df.corr(), title="Heatmap")
-            elif visualization_type == "Radial Chart":
-                fig = px.line_polar(df, r=y_axis, theta=x_axis, title="Radial Chart")
-            elif visualization_type == "Funnel Chart":
-                fig = px.funnel(df, x=x_axis, y=y_axis, title="Funnel Chart")
-
-            if fig:
-                st.plotly_chart(fig)
+                # Automatically clean data when uploaded
+                df, report = clean_data(df)
+                st.write("Cleaned Data:")
+                st.dataframe(df)
                 
-                # Auto-generate a description for the chart
-                description = generate_chart_description(fig)
-                st.subheader("Chart Description")
-                st.write(description)
+                # Display the cleaning process report
+                st.subheader("Data Cleaning Report")
+                for item in report:
+                    st.write("- " + item)
+
+                st.markdown('<p class="steps-font">Step 2: Proceed to Visualization</p>', unsafe_allow_html=True)
+                # Add a button to start visualization
+                if st.button("Start Visualization"):
+                    st.session_state.visualization_started = True
+
+                if st.session_state.visualization_started:
+                    # Visualization and report generation
+                    visualize_and_report(df, report)
+                
+
+def visualize_and_report(df, report):
+    st.subheader("Choose Visualization Type")
+    
+    # Determine available chart types based on the data
+    numeric_columns = df.select_dtypes(include=np.number).columns.tolist()
+    categorical_columns = df.select_dtypes(include=['object', 'category']).columns.tolist()
+    available_charts = []
+
+    if len(numeric_columns) > 1:
+        available_charts.append("Line Graph")
+        available_charts.append("Heatmap")
+    if len(categorical_columns) > 0 and len(numeric_columns) > 0:
+        available_charts.append("Column Graph")
+        available_charts.append("Funnel Chart")
+    if len(numeric_columns) > 0 and len(categorical_columns) > 0:
+        available_charts.append("Radial Chart")
+
+    if not available_charts:
+        st.warning("No suitable charts available for the current dataset.")
+        return
+
+    visualization_type = st.selectbox(
+        "Select a chart type:",
+        available_charts
+    )
+
+    st.subheader("Select Columns for Visualization")
+    if visualization_type in ["Line Graph", "Column Graph", "Funnel Chart", "Radial Chart"]:
+        x_axis = st.selectbox("X-Axis", options=categorical_columns if visualization_type in ["Column Graph", "Funnel Chart", "Radial Chart"] else numeric_columns)
+        y_axis = st.selectbox("Y-Axis", options=numeric_columns)
+    elif visualization_type == "Heatmap":
+        st.info("Heatmap will use all numeric columns for correlation matrix.")
+
+    fig = None
+
+    try:
+        if visualization_type == "Line Graph":
+            fig = px.line(df, x=x_axis, y=y_axis, title="Line Graph")
+        elif visualization_type == "Column Graph":
+            fig = px.bar(df, x=x_axis, y=y_axis, title="Column Graph")
+        elif visualization_type == "Heatmap":
+            fig = px.imshow(df[numeric_columns].corr(), title="Heatmap")
+        elif visualization_type == "Radial Chart":
+            # Check if data is applicable for radial chart
+            if x_axis not in categorical_columns or y_axis not in numeric_columns:
+                st.warning("Radial chart requires a categorical column for the X-axis and a numeric column for the Y-axis.")
+            elif df[x_axis].nunique() < 2:
+                st.warning("Radial chart requires at least two unique values in the X-axis column.")
+            else:
+                try:
+                    fig = px.line_polar(df, r=y_axis, theta=x_axis, line_close=True, title="Radial Chart")
+                except Exception as e:
+                    st.warning("Radial chart cannot be generated with the selected data.")
+
+        elif visualization_type == "Funnel Chart":
+            fig = px.funnel(df, x=x_axis, y=y_axis, title="Funnel Chart")
+
+        if fig:
+            st.plotly_chart(fig)
+
+            # Auto-generate a description for the chart
+            description = generate_chart_description(fig)
+            st.subheader("Chart Description")
+            st.write(description)
 
         # Step 4: Report Download
-        if st.checkbox("Download Cleaned Data as Report"):
+        st.markdown('<p class="steps-font">Step 3: Generate a Copy of Cleaned Data with Visualization and Reports</p>', unsafe_allow_html=True)
+        if st.button("Generate Reports"):
             report_file = generate_report(df, fig, report, description)
+            st.markdown('<p class="steps-font">Step 4: You Can Now Save a Copy:)</p>', unsafe_allow_html=True)
             st.download_button(
-                label="Download Excel Report with Explanation and Chart",
+                label="Download",
                 data=report_file,
                 file_name="Report.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+            )
+    except Exception as e:
+        st.error(f"An error occurred while generating the {visualization_type}: {e}")
 
 
 if __name__ == "__main__":
