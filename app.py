@@ -55,9 +55,7 @@ def clean_data(df, missing_threshold=0.5, zscore_threshold=3, numeric_range=None
             # Step 2: Count and replace invalid names (those containing digits)
             digit_count = df[col].apply(lambda x: any(char.isdigit() for char in x)).sum()
             df[col] = df[col].apply(lambda x: "Unknown" if any(char.isdigit() for char in x) else x)
-            if replaced_count > 0:
-                report.append(f"Replaced {replaced_count} invalid names in column '{col}' with 'Unknown'.")
-
+            
             # Step 3: Report the changes
             if blank_count > 0:
                 report.append(f"Replaced {blank_count} missing or empty names in column '{col}' with 'Unknown'.")
@@ -218,77 +216,110 @@ def generate_report(df, chart, report, description):
     output.seek(0)
     return output
 
+def load_css():
+    """Load CSS for the Streamlit app from an external file."""
+    with open('style.css') as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
-# Main Streamlit app
 def main():
-    st.title("CSV Data Cleaning and Visualization")
-
-    # Step 1: File Upload
-    uploaded_file = st.file_uploader("Upload a CSV File", type="csv")
+    st.set_page_config(page_title="Data Cleaning and Visualization", layout="wide")
     
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        st.write("Uploaded CSV:")
-        st.dataframe(df)
+    # Load custom CSS
+    load_css()
 
-        # Automatically clean data when uploaded
-        df, report = clean_data(df)
-        st.write("Cleaned Data:")
-        st.dataframe(df)
-        
-        # Display the cleaning process report
-        st.subheader("Data Cleaning Report")
-        for item in report:
-            st.write("- " + item)
+    st.image("images/logo.png")
+    # Welcome page with a "Get Started" button
+    with st.container():
+        if 'started' not in st.session_state:
+            st.session_state['started'] = False
+        if 'visualization_started' not in st.session_state:
+            st.session_state['visualization_started'] = False
 
-        # Step 3: Visualization Options
-        if st.checkbox("Visualize Data"):
-            st.subheader("Choose Visualization Type")
-            visualization_type = st.selectbox(
-                "Select a chart type:",
-                ["Line Graph", "Column Graph", "Heatmap", "Radial Chart", "Funnel Chart"]
-            )
+        if not st.session_state.started:
+            st.markdown('<p class="big-font">Welcome to GraphIQ!</p>', unsafe_allow_html=True)
+            st.markdown('<p class="medium-font">We are excited to have you on board. With GraphIQ, you can easily clean, analyze, and visualize your data like never before. <br> Get started today and unlock powerful insights with just a few clicks!</p>', unsafe_allow_html=True)
+            if st.button("Get Started"):
+                st.session_state.started = True
 
-            # Allow user to select columns for visualization
-            st.subheader("Select Columns for Visualization")
-            all_columns = df.columns.tolist()  # Include all columns, not just numeric
-            if len(all_columns) < 1:
-                st.warning("No columns available for visualization.")
-                return
+        if st.session_state.started:
+            st.markdown('<p class="steps-font">Step 1: Upload CSV File</p>', unsafe_allow_html=True)
 
-            x_axis = st.selectbox("X-Axis", options=all_columns)
-            y_axis = st.selectbox("Y-Axis", options=all_columns)
+            # Step 1: File Upload
+            uploaded_file = st.file_uploader("Upload a CSV File", type="csv")
+            
+            if uploaded_file is not None:
+                df = pd.read_csv(uploaded_file)
+                st.write("Uploaded CSV:")
+                st.dataframe(df)
 
-            fig = None
-            if visualization_type == "Line Graph":
-                fig = px.line(df, x=x_axis, y=y_axis, title="Line Graph")
-            elif visualization_type == "Column Graph":
-                fig = px.bar(df, x=x_axis, y=y_axis, title="Column Graph")
-            elif visualization_type == "Heatmap":
-                fig = px.imshow(df.corr(), title="Heatmap")
-            elif visualization_type == "Radial Chart":
-                fig = px.line_polar(df, r=y_axis, theta=x_axis, title="Radial Chart")
-            elif visualization_type == "Funnel Chart":
-                fig = px.funnel(df, x=x_axis, y=y_axis, title="Funnel Chart")
-
-            if fig:
-                st.plotly_chart(fig)
+                # Automatically clean data when uploaded
+                df, report = clean_data(df)
+                st.write("Cleaned Data:")
+                st.dataframe(df)
                 
-                # Auto-generate a description for the chart
-                description = generate_chart_description(fig)
-                st.subheader("Chart Description")
-                st.write(description)
+                # Display the cleaning process report
+                st.subheader("Data Cleaning Report")
+                for item in report:
+                    st.write("- " + item)
 
-        # Step 4: Report Download
-        if st.checkbox("Download Cleaned Data as Report"):
-            report_file = generate_report(df, fig, report, description)
-            st.download_button(
-                label="Download Excel Report with Explanation and Chart",
-                data=report_file,
-                file_name="Report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                st.markdown('<p class="steps-font">Step 2: Proceed to Visualization</p>', unsafe_allow_html=True)
+                # Add a button to start visualization
+                if st.button("Start Visualization"):
+                    st.session_state.visualization_started = True
+
+                if st.session_state.visualization_started:
+                    # Visualization and report generation
+                    visualize_and_report(df, report)
+                
+
+def visualize_and_report(df, report):
+    # Step 3: Visualization Options
+    st.subheader("Choose Visualization Type")
+    visualization_type = st.selectbox(
+        "Select a chart type:",
+        ["Line Graph", "Column Graph", "Heatmap", "Radial Chart", "Funnel Chart"]
     )
 
+    # Allow user to select columns for visualization
+    st.subheader("Select Columns for Visualization")
+    all_columns = df.columns.tolist()
+    if len(all_columns) < 1:
+        st.warning("No columns available for visualization.")
+        return
+
+    x_axis = st.selectbox("X-Axis", options=all_columns)
+    y_axis = st.selectbox("Y-Axis", options=all_columns)
+
+    fig = None
+    if visualization_type == "Line Graph":
+        fig = px.line(df, x=x_axis, y=y_axis, title="Line Graph")
+    elif visualization_type == "Column Graph":
+        fig = px.bar(df, x=x_axis, y=y_axis, title="Column Graph")
+    elif visualization_type == "Heatmap":
+        fig = px.imshow(df.corr(), title="Heatmap")
+    elif visualization_type == "Radial Chart":
+        fig = px.line_polar(df, r=y_axis, theta=x_axis, title="Radial Chart")
+    elif visualization_type == "Funnel Chart":
+        fig = px.funnel(df, x=x_axis, y=y_axis, title="Funnel Chart")
+
+    if fig:
+        st.plotly_chart(fig)
+        
+        # Auto-generate a description for the chart
+        description = generate_chart_description(fig)
+        st.subheader("Chart Description")
+        st.write(description)
+
+    # Step 4: Report Download
+    st.markdown('<p class="steps-font">Step 3: Save a Copy of Cleaned Data with Visualization and Reports</p>', unsafe_allow_html=True)
+    if st.button("Download Cleaned Data as Report"):
+        report_file = generate_report(df, fig, report, description)
+        st.download_button(
+            label="Download Excel Report with Explanation and Chart",
+            data=report_file,
+            file_name="Report.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 if __name__ == "__main__":
     main()

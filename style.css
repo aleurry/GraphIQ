@@ -1,0 +1,66 @@
+/* style.css */
+body, .stApp {
+    background-color: #121212; /* Light grey background color */
+}
+
+.logo-container {
+    position: absolute;
+    top: 10px; /* Adjust based on your preference */
+    right: 10px; /* Adjust based on your preference */
+    width: 100px; /* Adjust based on the size of your logo */
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: start; /* Change to start to allow margin-auto to push the button */
+  width: 100%; /* Full width of the viewport */
+  height: 100vh; /* Full height of the viewport */
+  padding: 5%; /* Padding relative to the parent width */
+}
+
+.big-font{
+  font-size: 300%; 
+}
+
+.medium-font {
+  font-size: 150%; /
+}
+
+.steps-font {
+  font-size: 200%; /
+}
+
+.big-font,.medium-font, .steps-font {
+    font-weight: bold;
+    text-align: start;
+    margin-bottom: 2%; 
+}
+
+.steps-font {
+    color: #BB86FC;
+}
+.get-started-button {
+  width: 50%; /* Button width relative to the parent width */
+  height: 8%; /* Button height relative to the viewport height */
+  font-size: 2%; /* Font size relative to the viewport width */
+  color: white;
+  background-color: #ff4b4b;
+  border-radius: 5%; /* Border radius relative to the parent width */
+  border: none;
+  cursor: pointer;
+  margin-top: auto; 
+  align-self: flex-end;
+}
+
+/* Adjustments for smaller devices */
+@media only screen and (max-width: 600px) {
+  .big-font {
+    font-size: 4%; /* Slightly larger font size for better readability on small devices */
+  }
+  .get-started-button {
+    width: 70%; /* Larger button width for easier interaction on small devices */
+    font-size: 2.5%; /* Larger font size for better readability */
+  }
+}
