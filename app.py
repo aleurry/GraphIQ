@@ -273,22 +273,37 @@ def main():
                 
 
 def visualize_and_report(df, report):
-    # Step 3: Visualization Options
     st.subheader("Choose Visualization Type")
-    visualization_type = st.selectbox(
-        "Select a chart type:",
-        ["Line Graph", "Column Graph", "Heatmap", "Radial Chart", "Funnel Chart"]
-    )
+    
+    # Determine available chart types based on the data
+    numeric_columns = df.select_dtypes(include=np.number).columns.tolist()
+    categorical_columns = df.select_dtypes(include=['object', 'category']).columns.tolist()
+    available_charts = []
 
-    # Allow user to select columns for visualization
-    st.subheader("Select Columns for Visualization")
-    all_columns = df.columns.tolist()
-    if len(all_columns) < 1:
-        st.warning("No columns available for visualization.")
+    if len(numeric_columns) > 1:
+        available_charts.append("Line Graph")
+        available_charts.append("Heatmap")
+    if len(categorical_columns) > 0 and len(numeric_columns) > 0:
+        available_charts.append("Column Graph")
+        available_charts.append("Funnel Chart")
+    if len(numeric_columns) > 0:
+        available_charts.append("Radial Chart")
+
+    if not available_charts:
+        st.warning("No suitable charts available for the current dataset.")
         return
 
-    x_axis = st.selectbox("X-Axis", options=all_columns)
-    y_axis = st.selectbox("Y-Axis", options=all_columns)
+    visualization_type = st.selectbox(
+        "Select a chart type:",
+        available_charts
+    )
+
+    st.subheader("Select Columns for Visualization")
+    if visualization_type in ["Line Graph", "Column Graph", "Funnel Chart", "Radial Chart"]:
+        x_axis = st.selectbox("X-Axis", options=categorical_columns if visualization_type in ["Column Graph", "Funnel Chart"] else numeric_columns)
+        y_axis = st.selectbox("Y-Axis", options=numeric_columns)
+    elif visualization_type == "Heatmap":
+        st.info("Heatmap will use all numeric columns for correlation matrix.")
 
     fig = None
     if visualization_type == "Line Graph":
@@ -296,7 +311,7 @@ def visualize_and_report(df, report):
     elif visualization_type == "Column Graph":
         fig = px.bar(df, x=x_axis, y=y_axis, title="Column Graph")
     elif visualization_type == "Heatmap":
-        fig = px.imshow(df.corr(), title="Heatmap")
+        fig = px.imshow(df[numeric_columns].corr(), title="Heatmap")
     elif visualization_type == "Radial Chart":
         fig = px.line_polar(df, r=y_axis, theta=x_axis, title="Radial Chart")
     elif visualization_type == "Funnel Chart":
@@ -311,11 +326,12 @@ def visualize_and_report(df, report):
         st.write(description)
 
     # Step 4: Report Download
-    st.markdown('<p class="steps-font">Step 3: Save a Copy of Cleaned Data with Visualization and Reports</p>', unsafe_allow_html=True)
-    if st.button("Download Cleaned Data as Report"):
+    st.markdown('<p class="steps-font">Step 3: Generate a Copy of Cleaned Data with Visualization and Reports</p>', unsafe_allow_html=True)
+    if st.button("Generate Reports"):
         report_file = generate_report(df, fig, report, description)
+        st.markdown('<p class="steps-font">Step 4: You Can Now Save a Copy:)</p>', unsafe_allow_html=True)
         st.download_button(
-            label="Download Excel Report with Explanation and Chart",
+            label="Download",
             data=report_file,
             file_name="Report.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
