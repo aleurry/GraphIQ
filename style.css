@@ -25,14 +25,15 @@ body, .stApp {
 }
 
 .medium-font {
-  font-size: 150%; /
+  font-size: 150%;
+  font-weight: 200; 
 }
 
 .steps-font {
   font-size: 200%; /
 }
 
-.big-font,.medium-font, .steps-font {
+.big-font, .steps-font {
     font-weight: bold;
     text-align: start;
     margin-bottom: 2%; 

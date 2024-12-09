@@ -286,7 +286,7 @@ def visualize_and_report(df, report):
     if len(categorical_columns) > 0 and len(numeric_columns) > 0:
         available_charts.append("Column Graph")
         available_charts.append("Funnel Chart")
-    if len(numeric_columns) > 0:
+    if len(numeric_columns) > 0 and len(categorical_columns) > 0:
         available_charts.append("Radial Chart")
 
     if not available_charts:
@@ -300,42 +300,57 @@ def visualize_and_report(df, report):
 
     st.subheader("Select Columns for Visualization")
     if visualization_type in ["Line Graph", "Column Graph", "Funnel Chart", "Radial Chart"]:
-        x_axis = st.selectbox("X-Axis", options=categorical_columns if visualization_type in ["Column Graph", "Funnel Chart"] else numeric_columns)
+        x_axis = st.selectbox("X-Axis", options=categorical_columns if visualization_type in ["Column Graph", "Funnel Chart", "Radial Chart"] else numeric_columns)
         y_axis = st.selectbox("Y-Axis", options=numeric_columns)
     elif visualization_type == "Heatmap":
         st.info("Heatmap will use all numeric columns for correlation matrix.")
 
     fig = None
-    if visualization_type == "Line Graph":
-        fig = px.line(df, x=x_axis, y=y_axis, title="Line Graph")
-    elif visualization_type == "Column Graph":
-        fig = px.bar(df, x=x_axis, y=y_axis, title="Column Graph")
-    elif visualization_type == "Heatmap":
-        fig = px.imshow(df[numeric_columns].corr(), title="Heatmap")
-    elif visualization_type == "Radial Chart":
-        fig = px.line_polar(df, r=y_axis, theta=x_axis, title="Radial Chart")
-    elif visualization_type == "Funnel Chart":
-        fig = px.funnel(df, x=x_axis, y=y_axis, title="Funnel Chart")
 
-    if fig:
-        st.plotly_chart(fig)
-        
-        # Auto-generate a description for the chart
-        description = generate_chart_description(fig)
-        st.subheader("Chart Description")
-        st.write(description)
+    try:
+        if visualization_type == "Line Graph":
+            fig = px.line(df, x=x_axis, y=y_axis, title="Line Graph")
+        elif visualization_type == "Column Graph":
+            fig = px.bar(df, x=x_axis, y=y_axis, title="Column Graph")
+        elif visualization_type == "Heatmap":
+            fig = px.imshow(df[numeric_columns].corr(), title="Heatmap")
+        elif visualization_type == "Radial Chart":
+            # Check if data is applicable for radial chart
+            if x_axis not in categorical_columns or y_axis not in numeric_columns:
+                st.warning("Radial chart requires a categorical column for the X-axis and a numeric column for the Y-axis.")
+            elif df[x_axis].nunique() < 2:
+                st.warning("Radial chart requires at least two unique values in the X-axis column.")
+            else:
+                try:
+                    fig = px.line_polar(df, r=y_axis, theta=x_axis, line_close=True, title="Radial Chart")
+                except Exception as e:
+                    st.warning("Radial chart cannot be generated with the selected data.")
 
-    # Step 4: Report Download
-    st.markdown('<p class="steps-font">Step 3: Generate a Copy of Cleaned Data with Visualization and Reports</p>', unsafe_allow_html=True)
-    if st.button("Generate Reports"):
-        report_file = generate_report(df, fig, report, description)
-        st.markdown('<p class="steps-font">Step 4: You Can Now Save a Copy:)</p>', unsafe_allow_html=True)
-        st.download_button(
-            label="Download",
-            data=report_file,
-            file_name="Report.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        elif visualization_type == "Funnel Chart":
+            fig = px.funnel(df, x=x_axis, y=y_axis, title="Funnel Chart")
+
+        if fig:
+            st.plotly_chart(fig)
+
+            # Auto-generate a description for the chart
+            description = generate_chart_description(fig)
+            st.subheader("Chart Description")
+            st.write(description)
+
+        # Step 4: Report Download
+        st.markdown('<p class="steps-font">Step 3: Generate a Copy of Cleaned Data with Visualization and Reports</p>', unsafe_allow_html=True)
+        if st.button("Generate Reports"):
+            report_file = generate_report(df, fig, report, description)
+            st.markdown('<p class="steps-font">Step 4: You Can Now Save a Copy:)</p>', unsafe_allow_html=True)
+            st.download_button(
+                label="Download",
+                data=report_file,
+                file_name="Report.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+    except Exception as e:
+        st.error(f"An error occurred while generating the {visualization_type}: {e}")
+
 
 if __name__ == "__main__":
     main()
