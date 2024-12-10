@@ -7,6 +7,9 @@ from scipy import stats
 from io import BytesIO
 import openpyxl
 from openpyxl.utils.dataframe import dataframe_to_rows
+import google.generativeai as genai
+genai.configure(api_key="AIzaSyBHuYf_1WqoxA-cUUXrB-qQNtJgd8DYSG0")
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 def clean_data(df, missing_threshold=0.5, zscore_threshold=3, numeric_range=None):
     report = []
@@ -104,67 +107,34 @@ def clean_data(df, missing_threshold=0.5, zscore_threshold=3, numeric_range=None
 
 def generate_chart_description(fig):
     if fig:
+        # Extract chart properties
         chart_type = fig.layout.title.text if hasattr(fig.layout, 'title') else 'Visualization'
-
-        # Default axis titles if they are not available
         x_axis_title = fig.layout.xaxis.title.text if hasattr(fig.layout, 'xaxis') and hasattr(fig.layout.xaxis, 'title') else 'X-Axis'
         y_axis_title = fig.layout.yaxis.title.text if hasattr(fig.layout, 'yaxis') and hasattr(fig.layout.yaxis, 'title') else 'Y-Axis'
 
-        # Handle Line Graphs
-        if chart_type == "Line Graph":
-            description = (
-                f"This is a Line Graph that shows the trend of {y_axis_title} over {x_axis_title}. "
-                f"The data points are connected by lines to indicate changes in {y_axis_title} as {x_axis_title} increases. "
-                f"The graph helps identify patterns, such as trends, fluctuations, and correlations between the two variables."
-            )
-
-        # Handle Bar Graphs
-        elif chart_type == "Column Graph":
-            description = (
-                f"This is a Column Graph comparing the values of {y_axis_title} across different categories of {x_axis_title}. "
-                f"Each bar represents a different category on the {x_axis_title} axis, and the height of the bar represents the value of {y_axis_title}. "
-                f"This chart is useful for comparing quantities across discrete categories."
-            )
-
-        # Handle Heatmaps
-        elif chart_type == "Heatmap":
-            description = (
-                f"This is a Heatmap showing the correlation between different numeric variables. "
-                f"The colors in the heatmap represent the strength of correlation: darker colors indicate stronger correlations, "
-                f"while lighter colors represent weaker correlations. The X and Y axes represent different variables."
-            )
-
-        # Handle Radial Charts
-        elif chart_type == "Radial Chart":
-            description = (
-                f"This is a Radial Chart displaying the relationship between {x_axis_title} and {y_axis_title} in a circular format. "
-                f"The chart uses polar coordinates where {x_axis_title} is represented by the angle and {y_axis_title} by the radius. "
-                f"Radial charts are often used to show cyclic or periodic trends."
-            )
-
-        # Handle Funnel Charts
-        elif chart_type == "Funnel Chart":
-            description = (
-                f"This is a Funnel Chart showing the progressive stages in a process. "
-                f"The chart is typically used to visualize the drop-off or conversion rate between each stage of a process. "
-                f"The {x_axis_title} represents the stages, and the {y_axis_title} shows the quantity at each stage."
-            )
-
-        # General case: When chart type is not specifically identified
-        else:
-            description = (
-                f"This is a {chart_type}. It visualizes the relationship between {y_axis_title} and {x_axis_title}. "
-                f"The chart allows us to understand how changes in {x_axis_title} affect {y_axis_title}. "
-                f"Additional insights such as trends, patterns, or outliers can be observed from this visualization."
-            )
-
-        # For specific information, like ranges or unique data points
+        # Extract data range if available
+        x_min, x_max, y_min, y_max = None, None, None, None
         if hasattr(fig.data[0], 'x') and hasattr(fig.data[0], 'y'):
             x_min, x_max = min(fig.data[0].x), max(fig.data[0].x)
             y_min, y_max = min(fig.data[0].y), max(fig.data[0].y)
-            description += f" The range of {x_axis_title} is from {x_min} to {x_max}, and the range of {y_axis_title} is from {y_min} to {y_max}."
+
+        # Construct prompt for Gemini API
+        prompt = f"""
+        Generate a description for a {chart_type} with the following details:
+        - X-axis is labeled "{x_axis_title}" and ranges from {x_min} to {x_max}.
+        - Y-axis is labeled "{y_axis_title}" and ranges from {y_min} to {y_max}.
+        Provide a clear and concise explanation of what this chart represents and how it can be interpreted.
+        """
+
+        try:
+            # Generate description using Gemini API
+            response = model.generate_content(prompt)
+            description = response.text
+        except Exception as e:
+            description = f"AI failed to generate a description. Error: {str(e)}"
 
         return description
+
     return "No chart to describe."
 
 def generate_report(df, chart, report, description):
