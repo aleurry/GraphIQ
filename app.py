@@ -201,16 +201,16 @@ def generate_report(df, chart, report, description):
                 cell.alignment = openpyxl.styles.Alignment(wrap_text=True)
 
         # 3. Add the chart to the "Chart" sheet
-        if chart is not None:
-            # Convert chart to image (PNG format)
-            chart_image = chart.to_image(format="png")
-            chart_image_stream = io.BytesIO(chart_image)
+        # if chart is not None:
+        #     # Convert chart to image (PNG format)
+        #     chart_image = chart.to_image(format="png")
+        #     chart_image_stream = io.BytesIO(chart_image)
 
-            # Create a new sheet for the chart
-            chart_sheet = workbook.create_sheet("Chart")
-            # Add the image to the new sheet
-            img = openpyxl.drawing.image.Image(chart_image_stream)
-            chart_sheet.add_image(img, "A1")
+        #     # Create a new sheet for the chart
+        #     chart_sheet = workbook.create_sheet("Chart")
+        #     # Add the image to the new sheet
+        #     img = openpyxl.drawing.image.Image(chart_image_stream)
+        #     chart_sheet.add_image(img, "A1")
     
     # Save the file to memory and return the bytes
     output.seek(0)
